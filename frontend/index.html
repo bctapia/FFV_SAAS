@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Molecule Drawer (JSME) + Submit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+    h1 { margin: 0 0 12px; }
+    #status { margin: 8px 0 16px; color: #555; }
+    #jsme_container { width: 600px; height: 500px; border: 1px solid #ddd; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    label { font-weight: 600; display: block; margin-bottom: 6px; }
+    input, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    textarea { min-height: 180px; }
+    .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    button { padding: 8px 12px; border: 0; border-radius: 999px; font-weight: 600; cursor: pointer; background: #1766b5; color: #fff; }
+    .ok { color: #146c2e; } .err { color: #b42318; }
+  </style>
+
+  <!-- Define callback BEFORE loading JSME -->
+  <script>
+    // Don't use the name "jsme" (the library uses it). Use jsmeEditor instead.
+    let jsmeEditor;
+
+    function jsmeOnLoad() {
+      document.getElementById("status").textContent = "Editor loaded!";
+      jsmeEditor = new JSApplet.JSME("jsme_container", "600px", "500px", {
+        options: "stereo,canonize,autoez",
+        guicolor: "#1766b5"
+      });
+
+      updateOutputs();
+      jsmeEditor.setCallBack("AfterStructureModified", updateOutputs);
+    }
+
+    function updateOutputs() {
+      try {
+        document.getElementById("smiles").value = jsmeEditor.smiles();
+        document.getElementById("mol").value = jsmeEditor.molFile(); // V2000
+      } catch (e) { console.error(e); }
+    }
+
+    async function copyText(el) {
+      try { await navigator.clipboard.writeText(el.value); } 
+      catch { el.select(); document.execCommand("copy"); }
+    }
+
+    function clearEditor() {
+      if (jsmeEditor) { jsmeEditor.reset(); updateOutputs(); }
+    }
+
+    // Submit to FastAPI at :8001
+    async function submitMolecule() {
+      const smiles = document.getElementById("smiles").value.trim();
+      const mol = document.getElementById("mol").value.trim();
+      const out = document.getElementById("submitStatus");
+      out.textContent = "Submitting…"; out.className = "";
+
+      try {
+        const res = await fetch("http://127.0.0.1:8001/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ smiles, mol })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        out.textContent = "Submitted ✔"; out.className = "ok";
+        console.log("Server response:", data);
+        alert("Submitted! Check console → Network/Console for response.");
+      } catch (err) {
+        console.error(err);
+        out.textContent = "Submit failed"; out.className = "err";
+        alert("Submit failed. See console for details.");
+      }
+    }
+  </script>
+
+  <!-- JSME online build -->
+  <script src="https://jsme-editor.github.io/dist/jsme/jsme.nocache.js"></script>
+</head>
+<body>
+  <h1>Molecule Drawer (JSME)</h1>
+  <div id="status">Loading JSME…</div>
+
+  <div id="jsme_container"></div>
+  <div class="row" style="margin-top:8px">
+    <button type="button" onclick="clearEditor()">Clear</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <label for="smiles">SMILES</label>
+      <input id="smiles" type="text" readonly />
+      <div class="row">
+        <button type="button" onclick="copyText(document.getElementById('smiles'))">Copy SMILES</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label for="mol">Molfile (V2000)</label>
+      <textarea id="mol" readonly></textarea>
+      <div class="row">
+        <button type="button" onclick="copyText(document.getElementById('mol'))">Copy Molfile</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <strong>Submit to backend</strong>
+    <p style="margin:8px 0 0">Posts <code>{ smiles, mol }</code> as JSON to <code>http://127.0.0.1:8001/api/analyze</code>.</p>
+    <div class="row">
+      <button type="button" onclick="submitMolecule()">Submit</button>
+      <span id="submitStatus" aria-live="polite"></span>
+    </div>
+  </div>
+</body>
+</html>

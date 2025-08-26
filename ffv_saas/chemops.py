@@ -1,6 +1,11 @@
+# collect mol v3000 from user
+
+
+
 # collect SMILES string (or MOL2???)
 
 # create mol2 if needed
+
 
 # send to antechamber
 
